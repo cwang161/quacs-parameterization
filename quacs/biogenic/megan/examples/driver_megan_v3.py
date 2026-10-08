@@ -14,7 +14,6 @@ import sys
 
 import numpy as np
 from .. import biogenic_emission_megan_v3 as adapter
-from ..src import megan_model as original
 
 # ============================================================================
 # 1. FILES: only EF/LDF and PFT CSV remain
@@ -93,8 +92,8 @@ def main():
         raise ValueError('Upstream MEGAN GAMSM_YN uses kc_7d, not SWC30D. Provide kc_7d or keep GAMSM_YN=False.')
 
     # The two non-meteorological inputs retain the original CSV format.
-    species = original.load_species_parameters(emission_factors_file)
-    pfts = original.load_pft_parameters(pft_fractions_file)
+    species = adapter.load_species_parameters(emission_factors_file)
+    pfts = adapter.load_pft_parameters(pft_fractions_file)
     if len(species.names) != n_class:
         raise ValueError(f'n_class={n_class}, but EF/LDF has {len(species.names)} classes')
     if len(pfts.fractions_percent) != NRTYP:

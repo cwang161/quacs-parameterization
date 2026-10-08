@@ -15,6 +15,97 @@ from typing import NamedTuple
 
 import numpy as np
 
+# Solar geometry and incident-radiation partition (formerly TIMEFUNC.py).
+_DEGREES_PER_RADIAN = 57.29578
+_PI_APPROX = 3.14159
+
+def solar_elevation_angle(day_of_year: float, latitude_deg: float, hour: float) -> float:
+    """Calculate solar elevation angle in degrees.
+
+    Notes
+    -----
+    The equation is retained from the original MEGAN canopy implementation.
+    Despite the old comment calling this a zenith angle, the returned value is
+    the *solar elevation* angle because its sine is used directly downstream.
+    """
+
+    sin_declination = -np.sin(0.40907) * np.cos(
+        6.28 * (day_of_year + 10.0) / 365.0
+    )
+    cos_declination = np.sqrt(1.0 - sin_declination**2)
+
+    latitude_radians = latitude_deg / _DEGREES_PER_RADIAN
+    term_a = np.sin(latitude_radians) * sin_declination
+    term_b = np.cos(latitude_radians) * cos_declination
+    sin_elevation = term_a + term_b * np.cos(
+        2.0 * _PI_APPROX * (hour - 12.0) / 24.0
+    )
+
+    # Numerical roundoff can produce values just outside [-1, 1].
+    sin_elevation = np.clip(sin_elevation, -1.0, 1.0)
+    return float(np.arcsin(sin_elevation) * _DEGREES_PER_RADIAN)
+
+
+def solar_eccentricity_factor(day_of_year: float) -> float:
+    """Return the Earth-Sun distance correction used by the canopy model."""
+
+    return float(1.0 + 0.033 * np.cos(2.0 * 3.14 * (day_of_year - 10.0) / 365.0))
+
+
+def partition_solar_radiation(solar_w_m2: float, maximum_solar_w_m2: float) -> tuple[float, float, float, float]:
+    """Partition solar radiation into direct/diffuse visible and near-IR terms.
+
+    Parameters
+    ----------
+    solar_w_m2
+        Observed incoming solar radiation.
+    maximum_solar_w_m2
+        Potential maximum solar radiation calculated from solar geometry.
+
+    Returns
+    -------
+    q_diffuse_visible, q_beam_visible, q_diffuse_nir, q_beam_nir
+        Radiation components in W m-2.
+    """
+
+    if maximum_solar_w_m2 <= 0.0:
+        transmissivity = 0.5
+    elif maximum_solar_w_m2 < solar_w_m2:
+        transmissivity = 1.0
+    else:
+        transmissivity = solar_w_m2 / maximum_solar_w_m2
+
+    # Diffuse fraction based on Lizaso et al. (2005), as in the source code.
+    diffuse_fraction = 0.156 + 0.86 / (
+        1.0 + np.exp(11.1 * (transmissivity - 0.53))
+    )
+
+    # Visible (PPFD) fraction based on Goudriaan and van Laar (1994).
+    visible_fraction = 0.55 - transmissivity * 0.12
+
+    # Diffuse visible fraction based on Jacovides et al. (2007).
+    visible_diffuse_fraction = diffuse_fraction * (
+        1.06 + transmissivity * 0.4
+    )
+    visible_diffuse_fraction = min(visible_diffuse_fraction, 1.0)
+
+    visible = visible_fraction * solar_w_m2
+    q_diffuse_visible = visible * visible_diffuse_fraction
+    q_beam_visible = visible - q_diffuse_visible
+
+    near_ir = solar_w_m2 - visible
+    q_diffuse_nir = near_ir * diffuse_fraction
+    q_beam_nir = near_ir - q_diffuse_nir
+
+    return (
+        float(q_diffuse_visible),
+        float(q_beam_visible),
+        float(q_diffuse_nir),
+        float(q_beam_nir),
+    )
+
+
+
 # ---------------------------------------------------------------------------
 # Canopy characteristics
 # ---------------------------------------------------------------------------
