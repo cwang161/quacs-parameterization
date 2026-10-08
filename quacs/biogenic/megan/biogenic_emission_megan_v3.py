@@ -20,7 +20,6 @@ import pandas as pd
 from .src import MEGCAN as canopy
 from .src import MEGVEA as activity
 
-_LAYER_WEIGHTS_5 = np.array([0.1184635, 0.2393144, 0.284444444, 0.2393144, 0.1184635], dtype=float)
 
 @dataclass(frozen=True)
 class ModelOptions:
@@ -225,13 +224,6 @@ def load_pft_parameters(path: Path) -> PFTParameters:
 
     return PFTParameters(names, fractions)
 
-
-def _layer_weights(number_of_layers: int) -> np.ndarray:
-    """Return vertical quadrature weights used to integrate activity factors."""
-
-    if number_of_layers == 5:
-        return _LAYER_WEIGHTS_5.copy()
-    return np.full(number_of_layers, 1.0 / number_of_layers, dtype=float)
 
 
 def _water_vapor_pressure_pa(
@@ -555,6 +547,7 @@ def _calculate_record_emissions(
 class MeganSettings:
     n_class: int = 19
     NLayers: int = 5
+    canopy_layer_method: str = 'gaussian'  # 'gaussian' or 'uniform'
     NRTYP: int = 6
     solar_constant_w_m2: float = 1361.5
     solar_to_ppfd: float = 2.1
@@ -613,7 +606,9 @@ def biogenic_emission_megan_v3(*, day, hour, latitude_deg, temperature_k,
         kc_min=settings.kc_min, kc_max=settings.kc_max)
     species = SpeciesParameters(tuple(['Isoprene'] + [f'class_{i}' for i in range(1, settings.n_class)]), ef, ldf)
     pfts = PFTParameters(tuple(f'canopy_{i}' for i in range(settings.NRTYP)), fractions * 100.0)
-    positions = MEGCAN.gaussian_layer_positions(settings.NLayers)
+    positions, weights = MEGCAN.canopy_layer_quadrature(
+        settings.NLayers, settings.canopy_layer_method
+    )
     canopy_state = _calculate_canopy_state(day=float(day), hour=float(hour),
         temperature_k=float(temperature_k), ppfd=float(ppfd), lai=float(lai),
         wind_m_s=float(wind_m_s), humidity_input=float(relative_humidity_percent),
@@ -626,5 +621,5 @@ def biogenic_emission_megan_v3(*, day, hour, latitude_deg, temperature_k,
         daily_max_temperature_k=float(tmax_k), daily_min_temperature_k=float(tmin_k),
         daily_max_wind_m_s=float(windmax_m_s), kc_7d=float(kc_7d),
         controls=controls, species=species, options=options,
-        layer_weights=_layer_weights(settings.NLayers))
+        layer_weights=weights)
     return np.asarray(flux, dtype=float)

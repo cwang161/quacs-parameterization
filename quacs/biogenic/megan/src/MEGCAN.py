@@ -12,6 +12,7 @@ The public wrappers are retained so existing scripts remain usable.
 from __future__ import annotations
 from typing import NamedTuple
 import numpy as np
+from numpy.polynomial.legendre import leggauss
 
 # ---------------------------------------------------------------------------
 # Canopy characteristics
@@ -209,21 +210,32 @@ class CanopyEnergyBalanceProfile(NamedTuple):
     shade_stomatal_resistance: np.ndarray
 
 
-def gaussian_layer_positions(number_of_layers: int) -> np.ndarray:
-    """Return normalized canopy-depth positions for numerical quadrature."""
+def canopy_layer_quadrature(
+    number_of_layers: int, method: str = "gaussian"
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return canopy-depth nodes and matching integration weights on [0, 1].
 
-    if number_of_layers <= 0:
-        raise ValueError("number_of_layers must be positive")
-    if number_of_layers == 1:
-        return np.array([0.5], dtype=float)
-    if number_of_layers == 3:
-        return np.array([0.112702, 0.5, 0.887298], dtype=float)
-    if number_of_layers == 5:
-        return np.array(
-            [0.0469101, 0.2307534, 0.5, 0.7692465, 0.9530899],
-            dtype=float,
-        )
-    return (np.arange(number_of_layers, dtype=float) + 0.5) / number_of_layers
+    gaussian: Gauss-Legendre quadrature; uniform: equal-width midpoint rule.
+    """
+    if isinstance(number_of_layers, (bool, np.bool_)) or not isinstance(
+        number_of_layers, (int, np.integer)
+    ) or number_of_layers < 1:
+        raise ValueError("number_of_layers must be a positive integer")
+    if method not in ("gaussian", "uniform"):
+        raise ValueError("method must be 'gaussian' or 'uniform'")
+
+    if method == "gaussian":
+        nodes, weights = leggauss(number_of_layers)
+        return (nodes + 1.0) / 2.0, weights / 2.0
+
+    nodes = (np.arange(number_of_layers, dtype=float) + 0.5) / number_of_layers
+    weights = np.full(number_of_layers, 1.0 / number_of_layers, dtype=float)
+    return nodes, weights
+
+
+def gaussian_layer_positions(number_of_layers: int) -> np.ndarray:
+    """Return Gaussian canopy nodes for callers using the previous API."""
+    return canopy_layer_quadrature(number_of_layers, "gaussian")[0]
 
 
 def canopy_temperature_lapse_rate(canopy_type: int, solar_w_m2: float) -> float:

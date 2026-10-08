@@ -27,6 +27,7 @@ pft_fractions_file = MEGAN_DIR / "inputs" / "PFT_Fraction.csv"
 # ============================================================================
 n_class = 19
 NLayers = 5
+canopy_layer_method = 'gaussian'  # 'gaussian' or 'uniform'
 NRTYP = 6
 solar_constant_w_m2 = 1361.5
 solar_to_ppfd = 2.1
@@ -101,6 +102,7 @@ def main():
 
     settings = adapter.MeganSettings(
         n_class=n_class, NLayers=NLayers, NRTYP=NRTYP,
+        canopy_layer_method=canopy_layer_method,
         solar_constant_w_m2=solar_constant_w_m2,
         solar_to_ppfd=solar_to_ppfd,
         air_quality_index=air_quality_index,
